@@ -1,6 +1,6 @@
 import pygame
 from src.config import IMAGES_PATH, SCREEN_WIDTH, SCREEN_HEIGHT, FONTS_PATH, SOUNDS_PATH
-
+from src.utils.transition import fade_transition
 class LoadingScreen:
     def __init__(self):
         # Background full màn hình
@@ -57,10 +57,10 @@ class LoadingScreen:
         self.loading_complete = False
 
         # Fade effect
-        self.fade_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        self.fade_surface.fill((0, 0, 0))
-        self.fading_out = False
-        self.fade_alpha = 0
+        #self.fade_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        #self.fade_surface.fill((0, 0, 0))
+        #self.fading_out = False
+        #self.fade_alpha = 0
 
         # Âm thanh click khi nhấn phím để tiếp tục
         try:
@@ -134,13 +134,10 @@ class LoadingScreen:
             dev_y = SCREEN_HEIGHT - self.dev_image.get_height() - self.dev_margin_y
             screen.blit(self.dev_image, (dev_x, dev_y))
 
-        if self.fading_out:
-            self.fade_surface.set_alpha(self.fade_alpha)
-            screen.blit(self.fade_surface, (0, 0))
-
     def run(self, screen, clock):
         progress_timer = 0
         progress_interval = 30
+        pressed_to_continue = False
 
         while True:
             dt = clock.tick(60)
@@ -150,17 +147,14 @@ class LoadingScreen:
                     pygame.quit()
                     exit()
 
-                if self.loading_complete and not self.fading_out:
+                if self.loading_complete and not pressed_to_continue:
                     if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
-                        self.fading_out = True
-                        self.fade_alpha = 0
-
-                        # Phát âm thanh click khi nhấn để tiếp tục
+                        pressed_to_continue = True
                         if self.continue_sound:
                             self.continue_sound.play()
-
-                        # Bắt đầu phát nhạc nền menu (lặp vô hạn)
                         pygame.mixer.music.play(-1)
+                        fade_transition(screen, clock, 350)
+                        return "menu"  # Trả về menu sau fade
 
             if not self.loading_complete:
                 progress_timer += dt
@@ -170,11 +164,6 @@ class LoadingScreen:
                     if self.progress >= self.total_steps:
                         self.progress = self.total_steps
                         self.loading_complete = True
-
-            if self.fading_out:
-                self.fade_alpha += 5
-                if self.fade_alpha >= 255:
-                    return "menu"
 
             self.draw(screen)
             pygame.display.update()

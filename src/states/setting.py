@@ -1,7 +1,7 @@
 import pygame
 from src.config import IMAGES_PATH, SCREEN_WIDTH, SCREEN_HEIGHT, FONTS_PATH, SOUNDS_PATH
 from src.sound_manager import SoundManager
-
+from src.utils.transition import fade_transition
 class SettingScreen:
     def __init__(self):
         # Background
@@ -291,6 +291,7 @@ class SettingScreen:
             # Click Back
             if clicked and self.back_hovered:
                 self.sound_manager.play_click()
+                fade_transition(screen, clock, 300)
                 return "menu"
 
             self.draw(screen)

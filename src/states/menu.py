@@ -1,10 +1,11 @@
 import pygame
 from src.config import IMAGES_PATH, SCREEN_WIDTH, SCREEN_HEIGHT, FONTS_PATH, SOUNDS_PATH
-from src.sound_manager import SoundManager
-
+from src.sound_manager import SoundManager  # Thêm import
+from src.utils.transition import fade_transition
 class MenuScreen:
-    def __init__(self):
+    def __init__(self, screen=None):
         # Background
+        self.screen = screen
         self.background = pygame.image.load(IMAGES_PATH + "menu_bg.png")
         self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
@@ -50,12 +51,12 @@ class MenuScreen:
         self.start_font = pygame.font.Font(FONTS_PATH, 32)
         self.version_font = pygame.font.Font(FONTS_PATH, 14)
 
-        # Phiên bản
+        # Phiên bản (giữ lại nếu muốn)
         self.version_text = "App version 1.0 | Python game"
         self.version_color = (200, 200, 200)
         self.version_margin = 15
 
-        # SoundManager
+        # Dùng SoundManager chung
         self.sound_manager = SoundManager()
         self.sound_manager.load_sounds(SOUNDS_PATH)
 
@@ -64,7 +65,7 @@ class MenuScreen:
         # Danh sách nút
         self.buttons = [
             {"text": "Start",           "action": self.start_game,       "is_start": True},
-            {"text": "Select chapter",  "action": self.select_level,     "is_start": False},
+            {"text": "Select chapter", "action": self.select_chapter, "is_start": False},
             {"text": "Setting",         "action": self.settings,         "is_start": False},
             {"text": "Quit game",       "action": self.exit_game,        "is_start": False}
         ]
@@ -84,13 +85,6 @@ class MenuScreen:
 
         self.hover_scale = 1.1
         self.hovered_index = None
-
-        # Fade out khi chuyển state
-        self.fade_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        self.fade_surface.fill((0, 0, 0))
-        self.fading_out = False
-        self.fade_alpha = 0
-        self.next_state = None
 
     def render_styled_text(self, text, font=None):
         if font is None:
@@ -120,83 +114,18 @@ class MenuScreen:
         self.sound_manager.play_click()
         print("Bắt đầu game!")
 
-    def select_level(self):
+    def select_chapter(self):
         self.sound_manager.play_click()
-        self.fading_out = True
-        self.fade_alpha = 0
-        self.next_state = "chapter"  # Chuyển sang ChapterScreen với fade
+        return "chapter"
 
     def settings(self):
         self.sound_manager.play_click()
-        self.fading_out = True
-        self.fade_alpha = 0
-        self.next_state = "settings"
+        return "settings"
 
     def exit_game(self):
         self.sound_manager.play_click()
         pygame.quit()
         exit()
-
-    def draw(self, screen):
-        screen.blit(self.background, (0, 0))
-        screen.blit(self.logo, (10, 40))
-
-        for i, button in enumerate(self.buttons):
-            is_start = button["is_start"]
-            base_y = 220 + i * 100
-
-            if is_start:
-                base_w = self.start_button_width
-                base_h = self.start_button_height
-                base_frame = self.start_frame_base
-                frame_original = self.start_frame_original
-                text_font = self.start_font
-            else:
-                base_w = self.normal_button_width
-                base_h = self.normal_button_height
-                base_frame = self.normal_frame_base
-                frame_original = self.normal_frame_original
-                text_font = self.button_font
-
-            base_x = (SCREEN_WIDTH - base_w) // 2
-            temp_rect = pygame.Rect(base_x, base_y, base_w, base_h)
-            is_hovered = temp_rect.collidepoint(pygame.mouse.get_pos())
-
-            if is_hovered:
-                self.hovered_index = i
-                if self.last_hovered_index != i:
-                    self.sound_manager.play_hover()
-
-                scaled_w = int(base_w * self.hover_scale)
-                scaled_h = int(base_h * self.hover_scale)
-                scaled_frame = pygame.transform.smoothscale(frame_original, (scaled_w, scaled_h))
-                scaled_x = (SCREEN_WIDTH - scaled_w) // 2
-                scaled_y = base_y - (scaled_h - base_h) // 2
-                screen.blit(scaled_frame, (scaled_x, scaled_y))
-
-                styled_text = self.render_styled_text(button["text"], text_font)
-                text_scaled = pygame.transform.smoothscale(styled_text, (int(styled_text.get_width() * self.hover_scale), int(styled_text.get_height() * self.hover_scale)))
-                text_x = scaled_x + (scaled_w - text_scaled.get_width()) // 2
-                text_y = scaled_y + (scaled_h - text_scaled.get_height()) // 2
-                screen.blit(text_scaled, (text_x, text_y))
-            else:
-                screen.blit(base_frame, (base_x, base_y))
-                styled_text = self.render_styled_text(button["text"], text_font)
-                text_x = base_x + (base_w - styled_text.get_width()) // 2
-                text_y = base_y + (base_h - styled_text.get_height()) // 2
-                screen.blit(styled_text, (text_x, text_y))
-
-        self.last_hovered_index = self.hovered_index if is_hovered else None
-
-        if self.dev_image:
-            dev_x = SCREEN_WIDTH - self.dev_image.get_width() - self.dev_margin_x
-            dev_y = SCREEN_HEIGHT - self.dev_image.get_height() - self.dev_margin_y
-            screen.blit(self.dev_image, (dev_x, dev_y))
-
-        # Fade overlay nếu fading_out
-        if self.fading_out:
-            self.fade_surface.set_alpha(self.fade_alpha)
-            screen.blit(self.fade_surface, (0, 0))
 
     def run(self, screen, clock):
         while True:
@@ -226,24 +155,32 @@ class MenuScreen:
 
                         if rect.collidepoint(mouse_pos):
                             result = button["action"]()
-                            if result:
-                                self.fading_out = True
-                                self.fade_alpha = 0
-                                self.next_state = result
-                                break
+                            if result in ["chapter", "settings"]:
+                                fade_transition(screen, clock, 250)
+                                return result
+                            elif result:
+                                return result
 
-            # Fade out
-            if self.fading_out:
-                self.fade_alpha += 5
-                if self.fade_alpha >= 255:
-                    return self.next_state
+            screen.blit(self.background, (0, 0))
+            screen.blit(self.logo, (10, 40))
 
-            # Hover
             for i, button in enumerate(self.buttons):
                 is_start = button["is_start"]
                 base_y = 220 + i * 100
-                base_w = self.start_button_width if is_start else self.normal_button_width
-                base_h = self.start_button_height if is_start else self.normal_button_height
+
+                if is_start:
+                    base_w = self.start_button_width
+                    base_h = self.start_button_height
+                    base_frame = self.start_frame_base
+                    frame_original = self.start_frame_original
+                    text_font = self.start_font
+                else:
+                    base_w = self.normal_button_width
+                    base_h = self.normal_button_height
+                    base_frame = self.normal_frame_base
+                    frame_original = self.normal_frame_original
+                    text_font = self.button_font
+
                 base_x = (SCREEN_WIDTH - base_w) // 2
                 temp_rect = pygame.Rect(base_x, base_y, base_w, base_h)
                 is_hovered = temp_rect.collidepoint(mouse_pos)
@@ -254,8 +191,31 @@ class MenuScreen:
                     if self.last_hovered_index != i:
                         self.sound_manager.play_hover()
 
+                    scaled_w = int(base_w * self.hover_scale)
+                    scaled_h = int(base_h * self.hover_scale)
+                    scaled_frame = pygame.transform.smoothscale(frame_original, (scaled_w, scaled_h))
+                    scaled_x = (SCREEN_WIDTH - scaled_w) // 2
+                    scaled_y = base_y - (scaled_h - base_h) // 2
+                    screen.blit(scaled_frame, (scaled_x, scaled_y))
+
+                    styled_text = self.render_styled_text(button["text"], text_font)
+                    text_scaled = pygame.transform.smoothscale(styled_text, (int(styled_text.get_width() * self.hover_scale), int(styled_text.get_height() * self.hover_scale)))
+                    text_x = scaled_x + (scaled_w - text_scaled.get_width()) // 2
+                    text_y = scaled_y + (scaled_h - text_scaled.get_height()) // 2
+                    screen.blit(text_scaled, (text_x, text_y))
+                else:
+                    screen.blit(base_frame, (base_x, base_y))
+                    styled_text = self.render_styled_text(button["text"], text_font)
+                    text_x = base_x + (base_w - styled_text.get_width()) // 2
+                    text_y = base_y + (base_h - styled_text.get_height()) // 2
+                    screen.blit(styled_text, (text_x, text_y))
+
             self.last_hovered_index = current_hovered
 
-            self.draw(screen)
+            if self.dev_image:
+                dev_x = SCREEN_WIDTH - self.dev_image.get_width() - self.dev_margin_x
+                dev_y = SCREEN_HEIGHT - self.dev_image.get_height() - self.dev_margin_y
+                screen.blit(self.dev_image, (dev_x, dev_y))
+
             pygame.display.update()
             clock.tick(60)

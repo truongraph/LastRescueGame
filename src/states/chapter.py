@@ -1,7 +1,7 @@
 import pygame
 from src.config import IMAGES_PATH, SCREEN_WIDTH, SCREEN_HEIGHT, FONTS_PATH, SOUNDS_PATH
 from src.sound_manager import SoundManager
-
+from src.utils.transition import fade_transition
 class ChapterScreen:
     def __init__(self):
         self.background = pygame.image.load(IMAGES_PATH + "menu_bg.png")
@@ -46,7 +46,7 @@ class ChapterScreen:
             self.star_dark = pygame.transform.smoothscale(self.star_dark, (self.star_size, self.star_size))
         except: self.star_dark = None
 
-        # Nút Previous / Next gốc + xám
+        # Nút Previous / Next
         self.arrow_size = 80
         try:
             self.prev_btn_original = pygame.image.load(IMAGES_PATH + "previous.png").convert_alpha()
@@ -90,16 +90,16 @@ class ChapterScreen:
         self.target_offset_x = 0
         self.current_offset_x = 0
 
-        # Hover chapter + hiệu ứng zoom mượt
-        self.chapter_hovered = None  # idx đang hover
-        self.last_chapter_hovered = None
-        self.hover_target_scale = {}  # target scale cho từng chapter
-        self.current_scales = {}       # scale hiện tại (mượt mà)
-        self.zoom_speed = 0.15         # tốc độ easing (giống fade trong loading)
+        # === Hiệu ứng zoom nhẹ khi hover chapter ===
+        self.hover_chapter = None
+        self.last_hover_chapter = None
+        self.target_scales = {}
+        self.current_scales = {}
+        self.zoom_speed = 0.15
+        self.max_zoom = 1.08
 
-        # Khởi tạo scale mặc định = 1.0 cho tất cả chapter
         for i in range(11):
-            self.hover_target_scale[i] = 1.0
+            self.target_scales[i] = 1.0
             self.current_scales[i] = 1.0
 
         # Hover nút
@@ -136,23 +136,26 @@ class ChapterScreen:
     def draw_chapter(self, screen, img, center_x, center_y, idx):
         if not img: return
         scale = self.current_scales.get(idx, 1.0)
-        if scale != 1.0:
+        if abs(scale - 1.0) > 0.001:
             w = int(img.get_width() * scale)
             h = int(img.get_height() * scale)
             scaled = pygame.transform.smoothscale(img, (w, h))
-            screen.blit(scaled, (center_x - w // 2, center_y - h // 2))
+            rect = scaled.get_rect(center=(center_x, center_y))
+            screen.blit(scaled, rect.topleft)
         else:
-            screen.blit(img, (center_x - img.get_width() // 2, center_y))
+            rect = img.get_rect(center=(center_x, center_y))
+            screen.blit(img, rect.topleft)
 
     def draw(self, screen):
         screen.blit(self.background, (0, 0))
 
         # Title
         title_x = (SCREEN_WIDTH - self.title_text.get_width()) // 2
-        screen.blit(self.title_text, (title_x, 50))
+        screen.blit(self.title_text, (title_x, 60))
 
         offset_x = self.current_offset_x
-        center_y = 170
+        # ĐÃ HẠ XUỐNG THẤP HƠN - đẹp và cân đối
+        center_y = SCREEN_HEIGHT // 2
         chapter_spacing = 330
 
         # Vẽ chapter thường
@@ -164,30 +167,30 @@ class ChapterScreen:
             idx1 = slide_idx * 2
             cx1 = screen_center_x - chapter_spacing // 2
             self.draw_chapter(screen, self.get_chapter_image(idx1), cx1, center_y, idx1)
-            self.draw_stars(screen, cx1, center_y + self.normal_height + 15, idx1)
+            self.draw_stars(screen, cx1, center_y + self.normal_height // 2 + 20, idx1)
 
             # Chapter phải
             idx2 = slide_idx * 2 + 1
             cx2 = screen_center_x + chapter_spacing // 2
             self.draw_chapter(screen, self.get_chapter_image(idx2), cx2, center_y, idx2)
-            self.draw_stars(screen, cx2, center_y + self.normal_height + 15, idx2)
+            self.draw_stars(screen, cx2, center_y + self.normal_height // 2 + 20, idx2)
 
         # Special chapter
         special_base_x = 5 * SCREEN_WIDTH + offset_x
         special_cx = special_base_x + SCREEN_WIDTH // 2
         self.draw_chapter(screen, self.get_chapter_image(10), special_cx, center_y, 10)
-        self.draw_stars(screen, special_cx, center_y + self.special_height + 20, 10)
+        self.draw_stars(screen, special_cx, center_y + self.special_height // 2 + 25, 10)
 
         # Nút Previous / Next
         arrow_margin = 120
-        arrow_y = center_y + self.normal_height // 2 - self.arrow_size // 2 + 20
+        arrow_y = center_y
         prev_img = self.prev_btn_gray if self.current_slide == 0 else self.prev_btn_original
         next_img = self.next_btn_gray if self.current_slide == self.total_slides - 1 else self.next_btn_original
 
         if prev_img:
-            screen.blit(prev_img, (arrow_margin, arrow_y))
+            screen.blit(prev_img, (arrow_margin, arrow_y - self.arrow_size // 2))
         if next_img:
-            screen.blit(next_img, (SCREEN_WIDTH - arrow_margin - self.arrow_size, arrow_y))
+            screen.blit(next_img, (SCREEN_WIDTH - arrow_margin - self.arrow_size, arrow_y - self.arrow_size // 2))
 
         # Dots
         dot_y = SCREEN_HEIGHT - 80
@@ -198,7 +201,7 @@ class ChapterScreen:
             radius = 10 if i == self.current_slide else 6
             pygame.draw.circle(screen, color, (start_x + i * dot_spacing, dot_y), radius)
 
-        # Back button + Developer logo (giữ nguyên)
+        # Back button
         back_x, back_y = 30, 30
         if self.back_frame_base:
             screen.blit(self.back_frame_base, (back_x, back_y))
@@ -206,6 +209,7 @@ class ChapterScreen:
         screen.blit(text, (back_x + (self.back_button_width - text.get_width()) // 2,
                           back_y + (self.back_button_height - text.get_height()) // 2))
 
+        # Developer logo
         if self.dev_image:
             screen.blit(self.dev_image, (SCREEN_WIDTH - self.dev_image.get_width() - self.dev_margin,
                                         SCREEN_HEIGHT - self.dev_image.get_height() - self.dev_margin))
@@ -247,9 +251,9 @@ class ChapterScreen:
 
             # Hover nút
             arrow_margin = 120
-            arrow_y = 170 + self.normal_height // 2 - self.arrow_size // 2 + 20
-            prev_rect = pygame.Rect(arrow_margin, arrow_y, self.arrow_size, self.arrow_size)
-            next_rect = pygame.Rect(SCREEN_WIDTH - arrow_margin - self.arrow_size, arrow_y, self.arrow_size, self.arrow_size)
+            arrow_y = SCREEN_HEIGHT // 2 + 30  # Đồng bộ với center_y mới
+            prev_rect = pygame.Rect(arrow_margin, arrow_y - self.arrow_size // 2, self.arrow_size, self.arrow_size)
+            next_rect = pygame.Rect(SCREEN_WIDTH - arrow_margin - self.arrow_size, arrow_y - self.arrow_size // 2, self.arrow_size, self.arrow_size)
             back_rect = pygame.Rect(30, 30, self.back_button_width, self.back_button_height)
 
             self.prev_hovered = prev_rect.collidepoint(mouse_pos) and self.current_slide > 0
@@ -262,52 +266,56 @@ class ChapterScreen:
 
             self.last_prev_hover, self.last_next_hover, self.last_back_hover = self.prev_hovered, self.next_hovered, self.back_hovered
 
-            # Hover chapter + cập nhật target scale
-            current_hover_chap = None
+            # Detect hover chapter để zoom
+            self.hover_chapter = None
             visible_slide = round(-self.current_offset_x / SCREEN_WIDTH)
-            center_y = 170
+            center_y = SCREEN_HEIGHT // 2 + 30  # Đồng bộ
             chapter_spacing = 330
 
             if 0 <= visible_slide < 5:
                 screen_center_x = visible_slide * SCREEN_WIDTH + SCREEN_WIDTH // 2 + self.current_offset_x
                 rel_x = mouse_pos[0] - screen_center_x
-                if center_y - 100 < mouse_pos[1] < center_y + self.normal_height + 100:
+                chapter_hitbox_height = self.normal_height + 100
+                if center_y - chapter_hitbox_height // 2 < mouse_pos[1] < center_y + chapter_hitbox_height // 2:
                     if abs(rel_x) < chapter_spacing // 2 + self.normal_width // 2:
-                        current_hover_chap = visible_slide * 2 if rel_x < 0 else visible_slide * 2 + 1
+                        self.hover_chapter = visible_slide * 2 if rel_x < 0 else visible_slide * 2 + 1
             elif visible_slide == 5:
-                if 100 < mouse_pos[1] < SCREEN_HEIGHT - 100:
-                    current_hover_chap = 10
+                chapter_hitbox_height = self.special_height + 100
+                if center_y - chapter_hitbox_height // 2 < mouse_pos[1] < center_y + chapter_hitbox_height // 2:
+                    self.hover_chapter = 10
 
             # Cập nhật target scale
             for i in range(11):
-                self.hover_target_scale[i] = 1.05 if i == current_hover_chap else 1.0
+                self.target_scales[i] = self.max_zoom if i == self.hover_chapter else 1.0
 
-            if current_hover_chap != self.last_chapter_hovered and current_hover_chap is not None:
+            # Sound hover
+            if self.hover_chapter != self.last_hover_chapter and self.hover_chapter is not None:
                 self.sound_manager.play_hover()
+            self.last_hover_chapter = self.hover_chapter
 
-            self.last_chapter_hovered = current_hover_chap
-
-            # Easing scale mượt mà (giống fade trong loading)
+            # Easing zoom
             for i in range(11):
-                diff = self.hover_target_scale[i] - self.current_scales[i]
+                diff = self.target_scales[i] - self.current_scales[i]
                 if abs(diff) > 0.001:
                     self.current_scales[i] += diff * self.zoom_speed
 
             # Click
+            clicked_chapter = self.hover_chapter if clicked else None
+
             if clicked:
                 if self.prev_hovered:
                     self.sound_manager.play_click()
                     self.go_to_slide(self.current_slide - 1)
-                if self.next_hovered:
+                elif self.next_hovered:
                     self.sound_manager.play_click()
                     self.go_to_slide(self.current_slide + 1)
-                if self.back_hovered:
+                elif self.back_hovered and clicked:
                     self.sound_manager.play_click()
+                    fade_transition(screen, clock, 300)
                     return "menu"
-
-                if current_hover_chap is not None:
+                elif clicked_chapter is not None:
                     self.sound_manager.play_click()
-                    idx = current_hover_chap
+                    idx = clicked_chapter
                     if idx < 10:
                         if self.chapters[idx]["type"] == "done":
                             print(f"Bắt đầu {self.chapters[idx]['name']}")
@@ -316,7 +324,7 @@ class ChapterScreen:
                     else:
                         print("Special Chapter - chưa mở khóa")
 
-            # Animation trượt slider
+            # Slider animation
             if abs(self.current_offset_x - self.target_offset_x) > 1:
                 diff = self.target_offset_x - self.current_offset_x
                 self.current_offset_x += diff * 0.2

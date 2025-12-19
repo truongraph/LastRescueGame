@@ -1,9 +1,11 @@
+# game.py
 import pygame
 from src.states.splash import SplashScreen
 from src.states.loading import LoadingScreen
 from src.states.menu import MenuScreen
 from src.states.setting import SettingScreen
 from src.states.chapter import ChapterScreen
+from src.utils.transition import fade_transition  # Thêm dòng này
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS
 
 class Game:
@@ -15,7 +17,6 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = True
 
-        # Khởi tạo states một lần
         self.states = {
             "splash": SplashScreen(),
             "loading": LoadingScreen(),
@@ -28,10 +29,19 @@ class Game:
     def run(self):
         while self.running:
             current_screen = self.states[self.current_state]
-            next_state = current_screen.run(self.screen, self.clock)
-            if next_state:
-                # Reset trạng thái fade khi enter state mới
-                if hasattr(self.states[next_state], 'on_enter'):
-                    self.states[next_state].on_enter()
-                self.current_state = next_state
+            result = current_screen.run(self.screen, self.clock)
+
+            if result == "quit":
+                self.running = False
+            elif result:
+                # Nếu có hiệu ứng chuyển cảnh cần fade
+                if result in ["loading", "menu", "chapter", "settings"]:
+                    next_state = result
+                    fade_transition(self.screen, self.clock)
+                    self.current_state = next_state
+                else:
+                    self.current_state = result
+
             pygame.display.flip()
+
+        pygame.quit()
